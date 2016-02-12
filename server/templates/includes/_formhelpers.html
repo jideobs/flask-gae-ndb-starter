@@ -1,0 +1,17 @@
+{% macro render_field(field) %}
+<div class="form-group">
+    {% if field.name not in ('csrf_token', 'is_authenticated') %}
+        {{ field.label }}
+        {{ field(**kwargs)|safe }}
+        <div class="error">
+            {% if field.errors %}
+                <ul class="errors">
+                    {% for error in field.errors %}
+                        <li>{{ error }}</li>
+                    {% endfor %}
+                </ul>
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
+{% endmacro %}

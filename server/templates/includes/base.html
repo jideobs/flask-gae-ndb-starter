@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    {% block head %}
+    <meta charset="UTF-8">
+    <title>{% block title %}{% endblock %}</title>
+    <link rel="stylesheet" href="/client/bower_components/bootstrap/dist/css/bootstrap.min.css" />
+    {% endblock %}
+</head>
+<body>
+<div class="main-container">
+    {% block  content %}{% endblock %}
+</div>
+<div class="footer text-center">
+    <div class="container">
+       {% block footer %}
+            &copy; Copyright 2016 by <a href="https://www.avorol.com">Avorol LLC</a>
+       {% endblock %}
+    </div>
+</div>
+<script type="text/javascript" src="/client/bower_components/jquery/dist/jquery.min.js"></script>
+<script type="text/javascript" src="/client/bower_components/bootstrap/dist/js/bootstrap.min.js"></script>
+</body>
+</html>
