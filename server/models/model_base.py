@@ -147,7 +147,8 @@ class ModelBase(ndb.Model):
                     entity = cls()
                     entity.from_datastore = False
                 else:
-                    entity = entity[0]
+                    if type(entity) == list:
+                        entity = entity[0]
                     entity.from_datastore = True
 
                 # set new values into entity fields
