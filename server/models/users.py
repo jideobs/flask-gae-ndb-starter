@@ -36,19 +36,3 @@ class Users(ModelBase):
 
     def verify_password(self, password):
         return security.check_password_hash(password, self.password)
-
-    def generate_auth_token(self, expiration_date=600):
-        serializer = Serializer(SECRET, expires_in=expiration_date)
-        return serializer.dumps({'id': self.key.id()})
-
-    @staticmethod
-    def verify_auth_token(token):
-        serializer = Serializer(SECRET)
-        try:
-            data = serializer.loads(token)
-        except SignatureExpired:
-            return None
-        except BadSignature:
-            return None
-        user = Users.get_by_id(data['id'])
-        return user
