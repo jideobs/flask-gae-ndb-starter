@@ -1,16 +1,14 @@
 from time import sleep
-
-from flask import Flask, request, render_template, url_for, redirect, jsonify
+from flask import Flask, request, render_template, url_for, redirect
 from flask_restful import Api
 from flask_login import LoginManager, login_user, login_required, current_user, logout_user
-from flask_wtf import Form
-from wtforms.ext.appengine.ndb import model_form
-from wtforms import StringField, PasswordField, validators
+
 from models.users import Users
 from config import APP_CONFIG
 from webapp2_extras import security
-
 from resources.users import UsersResource
+from forms import LoginForm
+from forms import RegisterFormExt
 
 app = Flask(__name__)
 app.config.update(APP_CONFIG)
@@ -31,31 +29,6 @@ def default():
     return render_template('index.html')
 
 
-class LoginForm(Form):
-    username = StringField('Username', [validators.DataRequired(message='Please enter your username')])
-    password = PasswordField('Password', [validators.DataRequired(message='Please enter your password')])
-
-    def __init__(self, *args, **kwargs):
-        super(LoginForm, self).__init__(*args, **kwargs)
-        self.user = None
-
-    def validate(self):
-        rv = Form.validate(self)
-        if not rv:
-            return False
-
-        user = Users.get_by_username(self.username.data)
-        if not user:
-            self.username.errors.append('User does not exist')
-            return False
-
-        if not user.verify_password(self.password.data):
-            self.password.errors.append('Password incorrect')
-            return False
-        self.user = user
-        return True
-
-
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
@@ -72,42 +45,13 @@ def login():
         return render_template('login.html', form=form)
 
 
-@app.route('/api/token', methods=['GET'])
-@login_required
-def get_auth_token():
-    return jsonify(auth_token=current_user.generate_auth_token())
-
-RegisterForm = model_form(Users, Form)
-
-
-class RegisterFormExt(RegisterForm):
-    password = PasswordField('Password', [validators.DataRequired(),
-                                          validators.EqualTo('confirm_password', message='Password does not match')])
-    confirm_password = PasswordField('Confirm Password', [validators.DataRequired()])
-
-    def __init__(self, *args, **kwargs):
-        super(RegisterForm, self).__init__(*args, **kwargs)
-
-    def validate(self):
-        rv = Form.validate(self)
-        if not rv:
-            return False
-
-        user = Users.get_by_username(self.username.data)
-        if user:
-            self.username.errors.append('Username has already been registered')
-            return False
-        return True
-
-
 @app.route('/register', methods=['GET', 'POST'])
 def register():
     register_error = None
     form = RegisterFormExt(csrf_enabled=False)
     if request.method == 'POST' and form.validate():
         password = security.generate_password_hash(form.password.data, length=32)
-        user = Users(username=form.username.data, password=password, school=form.school.data,
-                     graduating_class_name=form.graduating_class_name.data)
+        user = Users(username=form.username.data, password=password)
         user.put()
         return redirect(url_for('login'), code=302)
     return render_template('register.html', form=form, register_error=register_error)
