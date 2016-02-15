@@ -1,11 +1,6 @@
 from model_base import ModelBase
 from google.appengine.ext import ndb
 from webapp2_extras import security
-from itsdangerous import (TimedJSONWebSignatureSerializer as Serializer, BadSignature, SignatureExpired)
-from server.config import APP_CONFIG
-
-
-SECRET = APP_CONFIG['SECRET_KEY']
 
 
 class Users(ModelBase):
