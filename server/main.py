@@ -38,7 +38,7 @@ def login():
     if request.method == 'POST' and form.validate_on_submit():
         form.user.is_authenticated = True
         form.user.put()
-        login_user(form.user)
+        login_user(form.user, remember=form.remember_me.data)
         sleep(1)
         return redirect(url_for('dashboard'))
     else:
