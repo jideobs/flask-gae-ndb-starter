@@ -1,6 +1,6 @@
 from flask_wtf import Form
 from wtforms.ext.appengine.ndb import model_form
-from wtforms import StringField, PasswordField, validators
+from wtforms import StringField, PasswordField, BooleanField, validators
 
 from models.users import Users
 
@@ -8,6 +8,7 @@ from models.users import Users
 class LoginForm(Form):
     username = StringField('Username', [validators.DataRequired(message='Please enter your username')])
     password = PasswordField('Password', [validators.DataRequired(message='Please enter your password')])
+    remember_me = BooleanField('Remember me')
 
     def __init__(self, *args, **kwargs):
         super(LoginForm, self).__init__(*args, **kwargs)
