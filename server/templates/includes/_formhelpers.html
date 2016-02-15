@@ -15,3 +15,16 @@
     {% endif %}
 </div>
 {% endmacro %}
+
+
+{% macro render_errors(field) %}
+    {% if field.errors %}
+        <div class="error">
+            <ul class="errors">
+                {% for error in field.errors %}
+                    <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+    {% endif %}
+{% endmacro %}
