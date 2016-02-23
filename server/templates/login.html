@@ -3,7 +3,7 @@
 {% block content %}
 <link rel="stylesheet" type="text/css" href="client/css/login.css" />
 <div class="container">
-    <form class="form-signin">
+    <form class="form-signin" action="/login" method="POST">
         <h2 class="form-signin-heading">Login</h2>
         {{ form.username(class='form-control', placeholder='Username', required='required', autofocus='autofocus', id='inputUsername') | safe }}
         {{ form.password(class='form-control', placeholder='Password', required='required', autofocus='autofocus', id='inputPassword') | safe }}
