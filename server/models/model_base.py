@@ -3,11 +3,11 @@ from google.appengine.datastore.datastore_query import Cursor
 from google.appengine.api.datastore_errors import BadArgumentError, BadValueError
 from flask import request
 from flask_restful import abort
+import datetime as main_datetime
 
-from datetime import datetime
-
-DATE_TIME_FORMAT = '%Y-%m-%d %H:%m:%d'
-TIME_FORMAT = '%H:%m:%d'
+DATE_FORMAT = '%Y-%m-%d'
+DATE_TIME_FORMAT = '%Y-%m-%d %H:%M:%S'
+TIME_FORMAT = '%H:%M:%S'
 DEFAULT_FETCH_LIMIT = 10
 
 
@@ -20,7 +20,7 @@ class ModelBase(ndb.Model):
                 output[field] = model.key.id()
             else:
                 value = getattr(model, field)
-                if isinstance(value, datetime):
+                if isinstance(value, (main_datetime.datetime, main_datetime.date, main_datetime.time)):
                     output[field] = cls.serialize_date(value)
                 else:
                     output[field] = value
@@ -39,24 +39,22 @@ class ModelBase(ndb.Model):
 
     @staticmethod
     def serialize_date(date_time):
-        try:
-            date = datetime.strftime(date_time, DATE_TIME_FORMAT)
-        except ValueError:
-            try:
-                date = datetime.strftime(date_time, TIME_FORMAT)
-            except ValueError:
-                raise
+        if isinstance(date_time, main_datetime.date):
+            date = main_datetime.date.strftime(date_time, DATE_FORMAT)
+        elif isinstance(date_time, main_datetime.time):
+            date = main_datetime.time.strftime(date_time, TIME_FORMAT)
+        else:
+            date = main_datetime.datetime.strftime(date_time, DATE_TIME_FORMAT)
         return date
 
     @staticmethod
     def deserialize_date(date_time):
-        try:
-            date = datetime.strptime(date_time, DATE_TIME_FORMAT)
-        except ValueError:
-            try:
-                date = datetime.strptime(date_time, TIME_FORMAT)
-            except ValueError:
-                raise
+        if isinstance(date_time, main_datetime.date):
+            date = main_datetime.date.strftime(date_time, DATE_FORMAT)
+        elif isinstance(date_time, main_datetime.time):
+            date = main_datetime.time.strptime(date_time, TIME_FORMAT)
+        else:
+            date = main_datetime.datetime.strptime(date_time, DATE_TIME_FORMAT)
         return date
 
     @classmethod
@@ -111,37 +109,50 @@ class ModelBase(ndb.Model):
                     output = cls.get_entity_data(entities[0], return_fields)
 
                 return output
+
             return wrapper
+
         return decorator
 
+    @staticmethod
+    def _validate_fields(fields, model_fields):
+        """
+        Validate given fields against current model fields
+        :param fields: User defined fields
+        :param model_fields: Current model fields/properties
+        :return:
+        """
+        unknown_fields = set(fields) - set(model_fields)
+        if unknown_fields:
+            raise AttributeError('Fields {} does not exist'.format(','.join(unknown_fields)))
+
     @classmethod
-    def method(cls, parser=None, response_fields=()):
+    def method(cls, response_fields=(), filter_fields=()):
         def decorator(handler):
             def wrapper(self, **kwargs):
                 """
                 :param self:
-                :param args:
-                :param kwargs:
+                :param kwargs: arbitrary properties&values passed to handler.
                 :return:
                 """
                 model_fields = ['id']
                 model_fields += cls.get_entity_fields()
 
-                # check if response fields are attributes of current model
-                unknown_fields = set(response_fields) - set(model_fields)
-                if unknown_fields:
-                    raise AttributeError('Fields {} does not exist'.format(','.join(unknown_fields)))
+                # check if given response fields & filter fields are fields of current model
+                cls._validate_fields(response_fields, model_fields)
+                cls._validate_fields(filter_fields, model_fields)
 
-                # handle arbitrary field filters passed to server
+                # handle arbitrary property filters passed to handler
                 entity = None
                 if kwargs:
-                    for field, value in kwargs.iteritems():
-                        if field in model_fields:
-                            if field == 'id':
-                                entity = cls.get_by_id(value)
-                            else:
-                                model_property = getattr(cls, field)
-                                entity = cls.query(model_property == value).fetch()
+                    filters = set(kwargs.keys()).intersection(filter_fields)
+                    for field in filters:
+                        value = kwargs[field]
+                        if field == 'id':
+                            entity = cls.get_by_id(value)
+                        else:
+                            model_property = getattr(cls, field)
+                            entity = cls.query(model_property == value).fetch()
 
                 if not entity:
                     entity = cls()
@@ -152,7 +163,13 @@ class ModelBase(ndb.Model):
                     entity.from_datastore = True
 
                 # set new values into entity fields
-                args = parser.parse_args() if parser else request.get_json()
+                args = request.get_json() or {}
+
+                # add values passed from URL
+                url_fields = set(kwargs.keys()) - set(filter_fields)
+                for field in url_fields:
+                    args[field] = kwargs[field]
+
                 if args:
                     for field, value in args.iteritems():
                         if field in model_fields:
@@ -166,11 +183,12 @@ class ModelBase(ndb.Model):
                                 setattr(entity, field, value)
                             except (BadArgumentError, BadValueError), e:
                                 abort(400, message=e.message)
-
                 model = handler(self, entity)
 
                 # determine fields to return
                 return_fields = response_fields or model_fields
                 return cls.get_entity_data(model, return_fields)
+
             return wrapper
+
         return decorator
