@@ -5,11 +5,13 @@ from flask_login import current_user
 import datetime as main_datetime
 import functools
 from server import utils
+from google.appengine.datastore import datastore_query
 
-DEFAULT_FETCH_LIMIT = 10
+DEFAULT_FETCH_LIMIT = 1
 
 UNIQUE_ID = 'id'
 QUERY_FIELDS = 'query_fields'
+NEXT_PAGE = 'next_page'
 PROPERTY_COLLISION_TEMPLATE = ('Name conflict: %s set as an NDB property and '
                                'an Endpoints alias property.')
 
@@ -386,6 +388,14 @@ class ModelBase(ndb.Model):
 		data.update({'id': self.key.urlsafe()})
 		return data
 
+	@classmethod
+	def to_json_collection(cls, items, next_cursor=None):
+		output = {NEXT_PAGE: next_cursor, 'data': []}
+		for item in items:
+			output['data'].append(item.to_json())
+		print output
+		return output
+
 	def from_json(self, request_data):
 		"""
 		Update entity with new data from json.
@@ -443,3 +453,46 @@ class ModelBase(ndb.Model):
 			return entity_to_request_method
 
 		return request_to_entity_decorator
+
+	@classmethod
+	def query_method(cls, transform_request=False, transform_fields=None, user_required=False):
+		"""Creates an API method decorator.
+		:param transform_request:
+		:param transform_fields:
+		:param user_required:
+		:return:
+		"""
+
+		def request_to_query_decorator(api_method):
+			@functools.wraps(api_method)
+			def query_from_request_method(service_instance, **filter_data):
+				if user_required and not current_user.is_authenticated:
+					abort(401, message='Invalid user.')
+
+				if UNIQUE_ID in filter_data:
+					entity_key = ndb.Key(urlsafe=filter_data.get(UNIQUE_ID))
+					request_entity = (entity_key and entity_key.get()) or cls()
+					filter_data.pop(UNIQUE_ID)
+					return request_entity.to_json()
+				else:
+					request_entity = cls()
+					request_entity.from_json(filter_data)
+					query_info = request_entity._endpoints_query_info
+					next_page = request.args.get(NEXT_PAGE)
+					if next_page:
+						query_info.cursor = datastore_query.Cursor(urlsafe=next_page)
+					query_info.SetQuery()
+					query = api_method(service_instance, query_info.query)
+					query_options = {'start_cursor': query_info.cursor}
+					items, next_cursor, more_results = query.fetch_page(DEFAULT_FETCH_LIMIT, **query_options)
+
+					if not more_results:
+						next_cursor = None
+					else:
+						next_cursor = next_cursor.urlsafe()
+
+					return cls.to_json_collection(items, next_cursor=next_cursor)
+
+			return query_from_request_method
+
+		return request_to_query_decorator
