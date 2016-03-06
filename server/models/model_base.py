@@ -431,7 +431,7 @@ class ModelBase(ndb.Model):
 					entity = cls()
 
 				request_data = request.get_json()
-				entity.from_json(request_data)
+				request_data and entity.from_json(request_data)
 				response = api_method(service_instance, entity)
 
 				if transform_request:
