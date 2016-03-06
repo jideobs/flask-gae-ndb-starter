@@ -72,7 +72,7 @@ def logout():
     return redirect(url_for('login'))
 
 
-api.add_resource(UsersResource, '/users', '/users/<string:username>', '/users/<int:id>')
+api.add_resource(UsersResource, '/users', '/users/<string:id>')
 
 if __name__ == '__main__':
     app.run(debug=True)
