@@ -7,7 +7,7 @@ import functools
 from server import utils
 from google.appengine.datastore import datastore_query
 
-DEFAULT_FETCH_LIMIT = 1
+DEFAULT_FETCH_LIMIT = 10
 
 UNIQUE_ID = 'id'
 QUERY_FIELDS = 'query_fields'
@@ -40,6 +40,7 @@ def _verify_property(modelclass, attr_name):
 	return prop
 
 
+# Code adapted from endpoints_proto_datastore lib.
 class _EndpointsQueryInfo(object):
 	"""A custom container for query information.
 
@@ -370,6 +371,15 @@ class ModelBase(ndb.Model):
 				entity_query.filter(value_property == value)
 			return entity_query.fetch()
 
+	@staticmethod
+	def to_json_data(value):
+		property_value = value
+		if isinstance(value, (main_datetime.date, main_datetime.datetime, main_datetime.time)):
+			property_value = utils.date_to_str(value)
+		elif isinstance(value, ndb.Key):
+			property_value = value.urlsafe()
+		return property_value
+
 	def to_json(self):
 		"""
 		Transforms entity property values to json format.
@@ -378,12 +388,11 @@ class ModelBase(ndb.Model):
 		:return: Dictionary containing entity data.
 		"""
 		data = self._to_dict()
-		for property, prop_type in data.iteritems():
-			property_value = getattr(self, property)
-			if isinstance(prop_type, (main_datetime.date, main_datetime.datetime, main_datetime.time)):
-				property_value = utils.date_to_str(property_value)
-			elif isinstance(prop_type, ndb.KeyProperty):
-				property_value = property_value.urlsafe()
+		for property, value in data.iteritems():
+			if isinstance(value, ModelBase):
+				property_value = value.to_json()
+			else:
+				property_value = self.to_json_data(value)
 			data[property] = property_value
 		data.update({'id': self.key.urlsafe()})
 		return data
@@ -393,7 +402,6 @@ class ModelBase(ndb.Model):
 		output = {NEXT_PAGE: next_cursor, 'data': []}
 		for item in items:
 			output['data'].append(item.to_json())
-		print output
 		return output
 
 	def from_json(self, request_data):
@@ -410,10 +418,12 @@ class ModelBase(ndb.Model):
 				prop_value = value
 				if isinstance(prop_type, (ndb.DateProperty, ndb.DateTimeProperty, ndb.TimeProperty)):
 					prop_value = utils.date_from_str(prop_type, prop_value)
+				elif isinstance(prop_type, ndb.KeyProperty):
+					prop_value = ndb.Key(urlsafe=prop_value)
 				setattr(self, property, prop_value)
 
 	@classmethod
-	def method(cls, transform_request=False, transform_fields=None, user_required=False):
+	def method(cls, transform_response=False, transform_fields=None, user_required=False):
 		"""Creates an API method decorator.
     :param transform_request: Boolean; indicates whether or not
         a response data's ndb.Key value are to be returned,
@@ -444,8 +454,8 @@ class ModelBase(ndb.Model):
 				request_data and entity.from_json(request_data)
 				response = api_method(service_instance, entity)
 
-				if transform_request:
-					response_data = response.transform_request(transform_fields)
+				if transform_response:
+					response_data = response.transform_response(transform_fields)
 				else:
 					response_data = response.to_json()
 				return response_data
@@ -455,7 +465,7 @@ class ModelBase(ndb.Model):
 		return request_to_entity_decorator
 
 	@classmethod
-	def query_method(cls, transform_request=False, transform_fields=None, user_required=False):
+	def query_method(cls, transform_response=False, transform_fields=None, user_required=False):
 		"""Creates an API method decorator.
 		:param transform_request:
 		:param transform_fields:
@@ -473,7 +483,7 @@ class ModelBase(ndb.Model):
 					entity_key = ndb.Key(urlsafe=filter_data.get(UNIQUE_ID))
 					request_entity = (entity_key and entity_key.get()) or cls()
 					filter_data.pop(UNIQUE_ID)
-					return request_entity.to_json()
+					return (transform_fields and request_entity.transform_response()) or request_entity.to_json()
 				else:
 					request_entity = cls()
 					request_entity.from_json(filter_data)
@@ -491,8 +501,42 @@ class ModelBase(ndb.Model):
 					else:
 						next_cursor = next_cursor.urlsafe()
 
-					return cls.to_json_collection(items, next_cursor=next_cursor)
+					if transform_response:
+						return cls.transform_response_collection(items, next_cursor=next_cursor)
+					else:
+						return cls.to_json_collection(items, next_cursor=next_cursor)
 
 			return query_from_request_method
 
 		return request_to_query_decorator
+
+	def transform_response(self, transform_fields=None):
+		"""
+		Select ndb.Key property types for their respective data response.
+		:param transform_fields: optional list or tuple which is used to specify returned properties for a
+					ndb.Key property.
+		:return:
+		"""
+		data = self._to_dict()
+		for property_name, value in data.iteritems():
+			if isinstance(value, ndb.Key):
+				property_value = value.get()
+				if property_value:
+					property_value = property_value.to_json()
+			else:
+				property_value = self.to_json_data(value)
+			data[property_name] = property_value
+		data['id'] = self.key.urlsafe()
+		return data
+
+	@classmethod
+	def transform_response_collection(cls, items, next_cursor=None, transform_fields=None):
+		"""
+		Transforming a collection of response data
+		:param transform_fields:
+		:return:
+		"""
+		output = {NEXT_PAGE: next_cursor, 'data': []}
+		for item in items:
+			output['data'].append(item.transform_response())
+		return output
