@@ -6,6 +6,8 @@ import datetime as main_datetime
 import functools
 from server import utils
 from google.appengine.datastore import datastore_query
+from google.appengine.datastore.datastore_query import datastore_errors
+from server.commons import exceptions
 
 DEFAULT_FETCH_LIMIT = 10
 
@@ -438,8 +440,8 @@ class ModelBase(ndb.Model):
 		def request_to_entity_decorator(api_method):
 			@functools.wraps(api_method)
 			def entity_to_request_method(service_instance, **filter_data):
-				if user_required and current_user.is_authenticated is None:
-					abort(401, message='Invalid user.')
+				if user_required and not current_user.is_authenticated:
+					raise exceptions.AuthenticationError
 
 				entity = None
 				if filter_data:
@@ -452,7 +454,11 @@ class ModelBase(ndb.Model):
 
 				request_data = request.get_json()
 				request_data and entity.from_json(request_data)
-				response = api_method(service_instance, entity)
+
+				try:
+					response = api_method(service_instance, entity)
+				except datastore_errors.BadValueError, e:
+					raise exceptions.RequiredInputError(e.message)
 
 				if transform_response:
 					response_data = response.transform_response(transform_fields)
