@@ -2,23 +2,37 @@ from time import sleep
 from flask import Flask, request, render_template, url_for, redirect
 from flask_restful import Api
 from flask_login import LoginManager, login_user, login_required, current_user, logout_user
-
 from models.users import Users
 from config import APP_CONFIG
 from webapp2_extras import security
 from forms import LoginForm
 from forms import RegisterFormExt
-
 from resources.users import UsersResource
 from resources.tasks import TasksResource
 
 app = Flask(__name__)
 app.config.update(APP_CONFIG)
-api = Api(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.login_message = 'Please login to access this page.'
+
+
+class MyApi(Api):
+	def handle_error(self, e):
+		code = getattr(e, 'code', 500)
+		if code == 500:
+			error_code = e.error_code
+			message = 'something went wrong'
+			if error_code:
+				message = e.message
+			else:
+				error_code = code
+			return self.make_response({'message': message}, error_code)
+		return super(MyApi, self).handle_error(e)
+
+
+api = MyApi(app)
 
 
 @login_manager.user_loader
