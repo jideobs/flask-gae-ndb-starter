@@ -366,6 +366,8 @@ class ModelBase(ndb.Model):
 					if getattr(entity, field_name) != value:
 						return None
 				return entity
+			else:
+				return None
 		else:
 			entity_query = cls.query()
 			for field_name, value in filter_data.iteritems():
