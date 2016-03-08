@@ -334,24 +334,15 @@ class ModelBase(ndb.Model):
 	def _GetEndpointsProperty(cls, attr_name):
 		"""Return a property if set on a model class.
 
-    Attempts to retrieve both the NDB and alias version of the property, makes
-    sure at most one is not null and then returns that one.
+    Attempts to retrieve both the NDB version of the property.
 
     Args:
       attr_name: String; the name of the property.
 
     Returns:
       The property set at the attribute name.
-
-    Raises:
-      AttributeError: if the property is both an NDB and alias property.
     """
-		property_value = cls._properties.get(attr_name)
-		alias_value = cls._alias_properties.get(attr_name)
-		if property_value is not None and alias_value is not None:
-			raise AttributeError(PROPERTY_COLLISION_TEMPLATE % (attr_name,))
-
-		return property_value or alias_value
+		return cls._properties.get(attr_name)
 
 	@classmethod
 	def from_filter_data(cls, filter_data):
@@ -372,7 +363,7 @@ class ModelBase(ndb.Model):
 			entity_query = cls.query()
 			for field_name, value in filter_data.iteritems():
 				value_property = _verify_property(cls, field_name)
-				entity_query.filter(value_property == value)
+				entity_query = entity_query.filter(value_property == value)
 			return entity_query.fetch()
 
 	@staticmethod
@@ -449,6 +440,8 @@ class ModelBase(ndb.Model):
 				if filter_data:
 					entity = cls.from_filter_data(filter_data)
 					if entity:
+						if type(entity) is list:
+							entity = entity[0]
 						entity._from_datastore = True
 
 				if not entity:
